@@ -55,21 +55,18 @@ export const About: React.FC = () => {
           </div>
           <div className="space-y-6 text-lg text-slate-700 leading-relaxed">
             <p>
-              Ashadul Rahaman a B.Sc LL.B graduate form Kingston Law College,West Bengal State University,India. An optimis to learn new skills and gain knowledge. I'm more of a doer than just a dreamer .As a multilingual professional, I am fluent in English, Hindi and Bengali. I have gained valuable experience in the legal field through internships with various organizations.
-            </p>
+              I am <b>Ashadul Rahaman</b>, a B.Sc LL.B graduate from Kingston Law College, West Bengal State University, India. An optimist and a doer, I am driven to learn new skills, gain knowledge, and apply them effectively in practice.
+              </p>
             <p>
-              At betteringresults.in., I served as a legal and admin intern where I handled day-to-day responsibilities, trained new interns, and dealt with clients. I also drafted legal notices, conducted trademark search reports, and replied to objections.
-            </p>
+              Through internships with various organizations, I have gained valuable experience in the legal field, particularly in criminal law. I have also completed specialized courses in <b>Criminal Litigation Practice & Drafting</b> at Bettering Results, instructed by <b>Mr. Ashish Dixit</b> (Criminal Lawyer & Central Government Standing Counsel, Delhi High Court) and <b>Ms. Shriya Maini</b> (Advocate on Record, Supreme Court), as well as the Criminal Litigation Program at LawSikho, led by Ramanuj Mukherjee (CEO) and Abhyuday Agarwal (COO).
+              </p>
             <p>
-              This course was instructed by Mr. Ashish Dixit, Criminal lawyer & Central Government Standing Counsel for Delhi High Court at the Ministry of Law & Justice; & Ms. Shriya Maini, Advocate on Record, Supreme Court, Anuj Kapoor, Advocate on Record, Supreme Court. & Siddarth Agrawal, Advocate on Record, Supreme Court, and many other leading criminal law practitioners.
-            </p>
-             <p>
-              These experiences have given me a solid foundation in the legal industry and have prepared me for a successful career in the field.
-            </p>
+              These experiences have provided me with a strong foundation in litigation and legal drafting, preparing me to build a successful career in the legal profession.
+              </p>
             <h3 className="text-2xl font-bold text-slate-800 font-serif mb-3">Education</h3>
             <ul className="list-disc list-inside space-y-2 text-slate-600">
               <li>LL.B, Kingston Law College, West Bengal State University</li>
-              <li>B.Sc, Kalyani University</li>
+              <li>B.Sc in Mathematics Honours, Kalyani University</li>
             </ul>
           </div>
         </div>
