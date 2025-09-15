@@ -11,6 +11,12 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
+  const [newReview, setNewReview] = useState({
+    author: '',
+    relation: '',
+    quote: ''
+  });
+  const [allTestimonials, setAllTestimonials] = useState<Testimonial[]>(testimonials);
 
   const startSlider = useCallback(() => {
     stopSlider(); // Ensure no multiple intervals are running
@@ -49,6 +55,11 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     };
   }, [startSlider, stopSlider]);
 
+  // Update carousel to use allTestimonials
+  useEffect(() => {
+    setAllTestimonials(testimonials);
+  }, [testimonials]);
+
   const goToSlide = (slideIndex: number) => {
     setCurrentIndex(slideIndex);
     // Reset interval on manual navigation
@@ -57,6 +68,19 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   
   const goToPrev = () => goToSlide((currentIndex - 1 + testimonials.length) % testimonials.length);
   const goToNext = () => goToSlide((currentIndex + 1) % testimonials.length);
+
+  const handleReviewChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setNewReview({ ...newReview, [e.target.name]: e.target.value });
+  };
+
+  const handleAddReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newReview.author && newReview.relation && newReview.quote) {
+      setAllTestimonials([...allTestimonials, newReview]);
+      setNewReview({ author: '', relation: '', quote: '' });
+      setCurrentIndex(allTestimonials.length); // Show the new review
+    }
+  };
 
   return (
     <section id="testimonials" className="py-24 bg-slate-800 text-white" ref={sectionRef}>
@@ -73,7 +97,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
           onMouseEnter={stopSlider}
           onMouseLeave={startSlider}
         >
-          {testimonials.map((testimonial, index) => (
+          {allTestimonials.map((testimonial, index) => (
             <div
               key={index}
               className={`absolute top-0 left-0 w-full h-full flex items-center justify-center p-4 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`}
@@ -96,7 +120,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
           </button>
         </div>
         <div className="flex justify-center mt-8 space-x-3">
-          {testimonials.map((_, index) => (
+          {allTestimonials.map((_, index) => (
             <button
               key={index}
               onClick={() => goToSlide(index)}
@@ -104,6 +128,45 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
               aria-label={`Go to slide ${index + 1}`}
             ></button>
           ))}
+        </div>
+        {/* Add a Review Section */}
+        <div className="max-w-xl mx-auto mt-12 bg-slate-900/40 p-8 rounded-lg shadow-lg">
+          <h3 className="text-xl font-bold text-amber-400 mb-4 text-center">Add a Review</h3>
+          <form onSubmit={handleAddReview} className="space-y-4">
+            <input
+              type="text"
+              name="author"
+              value={newReview.author}
+              onChange={handleReviewChange}
+              placeholder="Your Name"
+              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
+              required
+            />
+            <input
+              type="text"
+              name="relation"
+              value={newReview.relation}
+              onChange={handleReviewChange}
+              placeholder="Your Relation (e.g. Client)"
+              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
+              required
+            />
+            <textarea
+              name="quote"
+              value={newReview.quote}
+              onChange={handleReviewChange}
+              placeholder="Your Review"
+              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
+              rows={3}
+              required
+            />
+            <button
+              type="submit"
+              className="w-full py-2 rounded bg-amber-400 text-slate-900 font-bold hover:bg-amber-300 transition-colors"
+            >
+              Add a Review
+            </button>
+          </form>
         </div>
       </div>
     </section>
