@@ -1,7 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// Note: avoid importing '@vercel/node' here so the TypeScript build on Vercel won't fail.
-// Use `any` for req/res and install @types/node as a dev dependency for process/Buffer types.
+// Lightweight serverless handler — do NOT import '@vercel/node' to avoid TS build errors.
+// Use `any` for req/res and install @types/node for Buffer/process types in the build.
 
 async function getFileFromGitHub() {
   const GITHUB_REPO = process.env.GITHUB_REPO; // format: owner/repo
