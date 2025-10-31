@@ -1,17 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO; // format: owner/repo
-const GITHUB_BRANCH = process.env.GITHUB_BRANCH || 'main';
-const REVIEWS_PATH = process.env.REVIEWS_PATH || 'data/reviews.json';
-
-if (!GITHUB_REPO) {
-  // allow GET without repo (will return empty) but reject write
-  console.warn('GITHUB_REPO not set; POST will fail');
-}
+// Note: avoid importing '@vercel/node' here so the TypeScript build on Vercel won't fail.
+// Use `any` for req/res and install @types/node as a dev dependency for process/Buffer types.
 
 async function getFileFromGitHub() {
+  const GITHUB_REPO = process.env.GITHUB_REPO; // format: owner/repo
+  const GITHUB_BRANCH = process.env.GITHUB_BRANCH || 'main';
+  const REVIEWS_PATH = process.env.REVIEWS_PATH || 'data/reviews.json';
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+
   if (!GITHUB_REPO) return { exists: false, content: '[]', sha: null };
+
   const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${REVIEWS_PATH}?ref=${GITHUB_BRANCH}`;
   const res = await fetch(url, {
     headers: GITHUB_TOKEN ? { Authorization: `token ${GITHUB_TOKEN}` } : undefined,
@@ -24,8 +23,13 @@ async function getFileFromGitHub() {
   return { exists: true, content: text, sha: json.sha };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   try {
+    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    const GITHUB_REPO = process.env.GITHUB_REPO; // format: owner/repo
+    const GITHUB_BRANCH = process.env.GITHUB_BRANCH || 'main';
+    const REVIEWS_PATH = process.env.REVIEWS_PATH || 'data/reviews.json';
+
     if (req.method === 'GET') {
       const file = await getFileFromGitHub();
       let data;
