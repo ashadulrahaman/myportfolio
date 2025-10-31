@@ -196,4 +196,16 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
 
         <div className="max-w-xl mx-auto mt-12 bg-slate-900/40 p-8 rounded-lg shadow-lg">
           <h3 className="text-xl font-bold text-amber-400 mb-4 text-center">Add a Review</h3>
-          <form onSubmit={handleAddReview} className="space
+          <form onSubmit={handleAddReview} className="space-y-4">
+            <input type="text" name="author" value={newReview.author} onChange={handleReviewChange} placeholder="Your Name" className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none" required />
+            <input type="text" name="relation" value={newReview.relation} onChange={handleReviewChange} placeholder="Your Relation (e.g. Client)" className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none" />
+            <textarea name="quote" value={newReview.quote} onChange={handleReviewChange} placeholder="Your Review" className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none" rows={3} required />
+            <button type="submit" className="w-full py-2 rounded bg-amber-400 text-slate-900 font-bold hover:bg-amber-300 transition-colors" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Add a Review'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+};

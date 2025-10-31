@@ -45,18 +45,7 @@ export const PracticeAreas: React.FC<PracticeAreasProps> = ({ areas }) => {
       }
     };
   }, []);
-
-  // Swap Criminal Defence and Family Law cards
-  const swappedAreas = [...areas];
-  const criminalIdx = swappedAreas.findIndex(a => a.title === "Criminal Defence");
-  const familyIdx = swappedAreas.findIndex(a => a.title === "Family Law");
-  if (criminalIdx !== -1 && familyIdx !== -1) {
-    // Swap positions
-    [swappedAreas[criminalIdx], swappedAreas[familyIdx]] = [swappedAreas[familyIdx], swappedAreas[criminalIdx]];
-    // Change Family Law heading
-    swappedAreas[criminalIdx].title = "Family & Personal Law";
-  }
-
+  
   return (
     <section id="practice-areas" className="py-24 bg-slate-50" ref={sectionRef}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -72,7 +61,7 @@ export const PracticeAreas: React.FC<PracticeAreasProps> = ({ areas }) => {
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {swappedAreas.map((area, index) => (
+          {areas.map((area, index) => (
             <PracticeAreaCard key={index} {...area} index={index} isVisible={isVisible} />
           ))}
         </div>
