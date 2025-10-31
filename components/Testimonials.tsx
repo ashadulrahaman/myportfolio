@@ -21,6 +21,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
 
   // testimonials state (persisted)
   const [allTestimonials, setAllTestimonials] = useState<Testimonial[]>(testimonials);
+  const [isSaving, setIsSaving] = useState(false);
 
   // ref that always points to the latest testimonials array (used inside interval)
   const allTestimonialsRef = useRef<Testimonial[]>(allTestimonials);
@@ -47,6 +48,26 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
       // ignore parse errors and fall back to props
     }
     setAllTestimonials(testimonials);
+  }, [testimonials]);
+
+  // load persisted testimonials from API on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch('/api/reviews');
+        if (!resp.ok) throw new Error('Failed to fetch reviews');
+        const json = await resp.json();
+        if (!cancelled && json && Array.isArray(json.reviews)) {
+          setAllTestimonials(json.reviews.length ? json.reviews : testimonials);
+        }
+      } catch {
+        // fall back to local props if API fails
+        setAllTestimonials(testimonials);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testimonials]);
 
   const stopSlider = useCallback(() => {
@@ -106,21 +127,36 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     setNewReview({ ...newReview, [e.target.name]: e.target.value });
   };
 
-  const handleAddReview = (e: React.FormEvent) => {
+  const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newReview.author && newReview.relation && newReview.quote) {
-      const newEntry: Testimonial = {
-        author: newReview.author,
-        relation: newReview.relation,
-        quote: newReview.quote
-      } as Testimonial;
-      const nextIndex = allTestimonials.length; // index where new item will be placed
-      const updated = [...allTestimonials, newEntry];
+    if (!newReview.author || !newReview.quote) return;
+    setIsSaving(true);
+    try {
+      const resp = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newReview),
+      });
+      const json = await resp.json();
+      if (resp.ok && json.reviews) {
+        setAllTestimonials(json.reviews);
+        setCurrentIndex(json.reviews.length - 1);
+        setNewReview({ author: '', relation: '', quote: '' });
+        startSlider();
+      } else {
+        // fallback: update locally if API failed
+        const updated = [...allTestimonials, { ...newReview }];
+        setAllTestimonials(updated);
+        setCurrentIndex(updated.length - 1);
+        setNewReview({ author: '', relation: '', quote: '' });
+      }
+    } catch {
+      const updated = [...allTestimonials, { ...newReview }];
       setAllTestimonials(updated);
+      setCurrentIndex(updated.length - 1);
       setNewReview({ author: '', relation: '', quote: '' });
-      setCurrentIndex(nextIndex);
-      // restart slider so it respects new length
-      startSlider();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -205,8 +241,9 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
             <button
               type="submit"
               className="w-full py-2 rounded bg-amber-400 text-slate-900 font-bold hover:bg-amber-300 transition-colors"
+              disabled={isSaving}
             >
-              Add a Review
+              {isSaving ? 'Saving...' : 'Add a Review'}
             </button>
           </form>
         </div>
