@@ -8,9 +8,11 @@ export interface PracticeArea {
 }
 
 export interface Testimonial {
-  quote: string;
   author: string;
-  relation: string;
+  relation?: string;
+  quote: string;
+  rating?: number; // added
+  // ...existing fields like id/created_at if present...
 }
 
 export interface Certification {

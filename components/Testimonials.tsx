@@ -13,7 +13,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
-  const [newReview, setNewReview] = useState({ author: '', relation: '', quote: '' });
+  const [newReview, setNewReview] = useState<{ author: string; relation: string; quote: string; rating: number }>({ author: '', relation: '', quote: '', rating: 5 });
   const [allTestimonials, setAllTestimonials] = useState<Testimonial[]>(testimonials);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -35,10 +35,10 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
       try {
         const { data, error } = await supabase
           .from('reviews')
-          .select('id,author,relation,quote,created_at')
+          .select('id,author,relation,quote,rating,created_at') // include rating
           .order('created_at', { ascending: true });
         if (!cancelled && !error && Array.isArray(data)) {
-          const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote }));
+          const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote, rating: r.rating ?? 5 }));
           if (mapped.length) setAllTestimonials(mapped);
         } else if (!cancelled) {
           setAllTestimonials(prev => (prev.length ? prev : testimonials));
@@ -99,21 +99,23 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const goToNext = () => goToSlide((currentIndex + 1) % Math.max(1, allTestimonials.length));
 
   const handleReviewChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setNewReview({ ...newReview, [e.target.name]: e.target.value });
+    setNewReview({ ...newReview, [e.target.name]: e.target.value } as any);
   };
+
+  const setRating = (r: number) => setNewReview(prev => ({ ...prev, rating: r }));
 
   const fetchAndSetReviews = async () => {
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select('id,author,relation,quote,created_at')
+        .select('id,author,relation,quote,rating,created_at') // include rating
         .order('created_at', { ascending: true });
       if (error) {
         console.error('Supabase select error:', error);
         return null;
       }
       if (Array.isArray(data)) {
-        const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote }));
+        const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote, rating: r.rating ?? 5 }));
         setAllTestimonials(mapped);
         return mapped;
       }
@@ -128,7 +130,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     if (!newReview.author.trim() || !newReview.quote.trim()) return;
     setIsSaving(true);
     try {
-      const payload = { author: newReview.author.trim(), relation: newReview.relation.trim() || '', quote: newReview.quote.trim() };
+      const payload = { author: newReview.author.trim(), relation: newReview.relation.trim() || '', quote: newReview.quote.trim(), rating: newReview.rating };
       const { data, error } = await supabase.from('reviews').insert([payload]).select();
       if (error) {
         console.error('Supabase insert error:', error);
@@ -143,14 +145,14 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
         setAllTestimonials(updated);
         setCurrentIndex(updated.length - 1);
       }
-      setNewReview({ author: '', relation: '', quote: '' });
+      setNewReview({ author: '', relation: '', quote: '', rating: 5 });
       startSlider();
     } catch (err) {
       console.error('handleAddReview caught:', err);
       const updated = [...allTestimonials, { ...newReview }];
       setAllTestimonials(updated);
       setCurrentIndex(updated.length - 1);
-      setNewReview({ author: '', relation: '', quote: '' });
+      setNewReview({ author: '', relation: '', quote: '', rating: 5 });
     } finally {
       setIsSaving(false);
     }
@@ -175,6 +177,11 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
                 <footer className="text-center">
                   <cite className="font-bold text-amber-400 not-italic">{testimonial.author}</cite>
                   <p className="text-sm text-slate-400">{testimonial.relation}</p>
+                  <div className="flex justify-center mt-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <span key={i} className={`text-amber-400 text-lg ${ (testimonial.rating ?? 0) >= i + 1 ? '' : 'opacity-30' }`}>★</span>
+                    ))}
+                  </div>
                 </footer>
               </blockquote>
             </div>
@@ -200,6 +207,25 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
             <input type="text" name="author" value={newReview.author} onChange={handleReviewChange} placeholder="Your Name" className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none" required />
             <input type="text" name="relation" value={newReview.relation} onChange={handleReviewChange} placeholder="Your Relation (e.g. Client)" className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none" />
             <textarea name="quote" value={newReview.quote} onChange={handleReviewChange} placeholder="Your Review" className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none" rows={3} required />
+
+            {/* Rating stars */}
+            <div className="flex items-center justify-center gap-4">
+              <span className="text-sm text-slate-300">Rating:</span>
+              <div className="flex gap-1">
+                {[1,2,3,4,5].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRating(n)}
+                    aria-label={`${n} star`}
+                    className={`text-2xl ${newReview.rating >= n ? 'text-amber-400' : 'text-slate-600'} transition-colors`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button type="submit" className="w-full py-2 rounded bg-amber-400 text-slate-900 font-bold hover:bg-amber-300 transition-colors" disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Add a Review'}
             </button>
