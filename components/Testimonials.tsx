@@ -9,7 +9,7 @@ interface TestimonialsProps {
 
 export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
@@ -23,28 +23,32 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     try { localStorage.setItem('testimonials', JSON.stringify(allTestimonials)); } catch {}
   }, [allTestimonials]);
 
-  // load local cached reviews then fetch from Supabase (fallback to props)
+  // Fetch reviews from Supabase (fallback to props/localStorage)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('testimonials');
       if (saved) setAllTestimonials(JSON.parse(saved));
     } catch {}
+
     let cancelled = false;
-    (async () => {
-      if (!supabase) return;
+    const fetchReviews = async () => {
       try {
         const { data, error } = await supabase
           .from('reviews')
-          .select('author,relation,quote,created_at')
+          .select('id,author,relation,quote,created_at')
           .order('created_at', { ascending: true });
-        if (!cancelled && !error && Array.isArray(data) && data.length) {
-          setAllTestimonials(data.map((r: any) => ({ author: r.author, relation: r.relation || '', quote: r.quote })));
+        if (!cancelled && !error && Array.isArray(data)) {
+          const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote }));
+          if (mapped.length) setAllTestimonials(mapped);
+        } else if (!cancelled) {
+          setAllTestimonials(prev => (prev.length ? prev : testimonials));
         }
       } catch {
-        // keep local or props
-        setAllTestimonials(prev => (prev.length ? prev : testimonials));
+        if (!cancelled) setAllTestimonials(prev => (prev.length ? prev : testimonials));
       }
-    })();
+    };
+
+    fetchReviews();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testimonials]);
@@ -78,12 +82,11 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
       }
     }, { threshold: 0.1 });
 
-    const currentRef = sectionRef.current;
-    if (currentRef) observer.observe(currentRef);
-
+    const el = sectionRef.current;
+    if (el) observer.observe(el);
     return () => {
       stopSlider();
-      if (currentRef) observer.unobserve(currentRef);
+      if (el) observer.unobserve(el);
     };
   }, [startSlider, stopSlider]);
 
@@ -98,36 +101,41 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     setNewReview({ ...newReview, [e.target.name]: e.target.value });
   };
 
-  // submit to Supabase and update UI
+  const fetchAndSetReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('id,author,relation,quote,created_at')
+        .order('created_at', { ascending: true });
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote }));
+        setAllTestimonials(mapped);
+        return mapped;
+      }
+    } catch {}
+    return null;
+  };
+
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newReview.author || !newReview.quote) return;
+    if (!newReview.author.trim() || !newReview.quote.trim()) return;
     setIsSaving(true);
     try {
-      if (supabase) {
-        const payload = { author: newReview.author, relation: newReview.relation || '', quote: newReview.quote };
-        const { error: insertError } = await supabase.from('reviews').insert([payload]);
-        if (insertError) throw insertError;
-        // re-fetch full list (keeps consistency)
-        const { data: allData, error: selectError } = await supabase
-          .from('reviews')
-          .select('author,relation,quote,created_at')
-          .order('created_at', { ascending: true });
-        if (!selectError && Array.isArray(allData)) {
-          const mapped = allData.map((r: any) => ({ author: r.author, relation: r.relation || '', quote: r.quote }));
-          setAllTestimonials(mapped);
-          setCurrentIndex(mapped.length - 1);
-          setNewReview({ author: '', relation: '', quote: '' });
-          startSlider();
-          setIsSaving(false);
-          return;
-        }
+      const payload = { author: newReview.author.trim(), relation: newReview.relation.trim() || '', quote: newReview.quote.trim() };
+      const { error: insertError } = await supabase.from('reviews').insert([payload]);
+      if (insertError) throw insertError;
+      // re-fetch to ensure DB consistency and ordering
+      const mapped = await fetchAndSetReviews();
+      if (mapped && mapped.length) {
+        setCurrentIndex(mapped.length - 1);
+      } else {
+        // fallback: append locally
+        const updated = [...allTestimonials, payload];
+        setAllTestimonials(updated);
+        setCurrentIndex(updated.length - 1);
       }
-      // fallback local
-      const updated = [...allTestimonials, { ...newReview }];
-      setAllTestimonials(updated);
-      setCurrentIndex(updated.length - 1);
       setNewReview({ author: '', relation: '', quote: '' });
+      startSlider();
     } catch {
       const updated = [...allTestimonials, { ...newReview }];
       setAllTestimonials(updated);
