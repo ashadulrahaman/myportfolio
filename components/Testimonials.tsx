@@ -11,25 +11,62 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
+
+  // form state for adding a review
   const [newReview, setNewReview] = useState({
     author: '',
     relation: '',
     quote: ''
   });
+
+  // testimonials state (persisted)
   const [allTestimonials, setAllTestimonials] = useState<Testimonial[]>(testimonials);
 
-  const startSlider = useCallback(() => {
-    stopSlider(); // Ensure no multiple intervals are running
-    intervalRef.current = window.setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % testimonials.length);
-    }, 5000);
-  }, [testimonials.length]);
+  // ref that always points to the latest testimonials array (used inside interval)
+  const allTestimonialsRef = useRef<Testimonial[]>(allTestimonials);
+  useEffect(() => {
+    allTestimonialsRef.current = allTestimonials;
+    // persist to localStorage whenever testimonials change
+    try {
+      localStorage.setItem('testimonials', JSON.stringify(allTestimonials));
+    } catch (e) {
+      // ignore localStorage errors
+    }
+  }, [allTestimonials]);
+
+  // load persisted testimonials (if any) on mount / when prop changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('testimonials');
+      if (saved) {
+        const parsed: Testimonial[] = JSON.parse(saved);
+        setAllTestimonials(parsed);
+        return;
+      }
+    } catch (e) {
+      // ignore parse errors and fall back to props
+    }
+    setAllTestimonials(testimonials);
+  }, [testimonials]);
 
   const stopSlider = useCallback(() => {
     if (intervalRef.current) {
       window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
+
+  const startSlider = useCallback(() => {
+    stopSlider(); // Ensure no multiple intervals are running
+    // Use the ref inside the interval so it sees the latest testimonials
+    intervalRef.current = window.setInterval(() => {
+      setCurrentIndex((prevIndex) => {
+        const len = allTestimonialsRef.current.length;
+        if (!len) return 0;
+        return (prevIndex + 1) % len;
+      });
+    }, 5000) as unknown as number;
+  }, [stopSlider]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -55,19 +92,15 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     };
   }, [startSlider, stopSlider]);
 
-  // Update carousel to use allTestimonials
-  useEffect(() => {
-    setAllTestimonials(testimonials);
-  }, [testimonials]);
-
   const goToSlide = (slideIndex: number) => {
     setCurrentIndex(slideIndex);
     // Reset interval on manual navigation
     startSlider();
   };
-  
-  const goToPrev = () => goToSlide((currentIndex - 1 + testimonials.length) % testimonials.length);
-  const goToNext = () => goToSlide((currentIndex + 1) % testimonials.length);
+
+  // use current testimonials length (not original prop length)
+  const goToPrev = () => goToSlide((currentIndex - 1 + allTestimonials.length) % Math.max(1, allTestimonials.length));
+  const goToNext = () => goToSlide((currentIndex + 1) % Math.max(1, allTestimonials.length));
 
   const handleReviewChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setNewReview({ ...newReview, [e.target.name]: e.target.value });
@@ -76,9 +109,18 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const handleAddReview = (e: React.FormEvent) => {
     e.preventDefault();
     if (newReview.author && newReview.relation && newReview.quote) {
-      setAllTestimonials([...allTestimonials, newReview]);
+      const newEntry: Testimonial = {
+        author: newReview.author,
+        relation: newReview.relation,
+        quote: newReview.quote
+      } as Testimonial;
+      const nextIndex = allTestimonials.length; // index where new item will be placed
+      const updated = [...allTestimonials, newEntry];
+      setAllTestimonials(updated);
       setNewReview({ author: '', relation: '', quote: '' });
-      setCurrentIndex(allTestimonials.length); // Show the new review
+      setCurrentIndex(nextIndex);
+      // restart slider so it respects new length
+      startSlider();
     }
   };
 
@@ -92,7 +134,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
           </div>
           <p className="mt-4 text-lg text-slate-300">Real stories from those I've had the privilege to represent.</p>
         </div>
-        <div 
+        <div
           className="max-w-4xl mx-auto relative h-80 md:h-64"
           onMouseEnter={stopSlider}
           onMouseLeave={startSlider}
