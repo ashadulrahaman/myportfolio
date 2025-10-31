@@ -13,7 +13,7 @@ export const Hero: React.FC = () => {
           Ashadul Rahaman
         </h1>
         <p className="text-xl md:text-2xl mb-8 text-slate-200 font-light drop-shadow-md [animation-delay:400ms]">
-          Criminal Lawyer at Calcutta High Court
+          Criminal Advocate at Calcutta High Court
         </p>
         <a
           href="https://wa.me/9775011207"

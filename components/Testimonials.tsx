@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Testimonial } from '../types';
 import { Icon } from './Icon';
+import { supabase } from '../lib/supabase';
 
 interface TestimonialsProps {
   testimonials: Testimonial[];
@@ -8,64 +9,47 @@ interface TestimonialsProps {
 
 export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
-  // form state for adding a review
-  const [newReview, setNewReview] = useState({
-    author: '',
-    relation: '',
-    quote: ''
-  });
-
-  // testimonials state (persisted)
+  const [newReview, setNewReview] = useState({ author: '', relation: '', quote: '' });
   const [allTestimonials, setAllTestimonials] = useState<Testimonial[]>(testimonials);
   const [isSaving, setIsSaving] = useState(false);
 
-  // ref that always points to the latest testimonials array (used inside interval)
   const allTestimonialsRef = useRef<Testimonial[]>(allTestimonials);
   useEffect(() => {
     allTestimonialsRef.current = allTestimonials;
-    // persist to localStorage whenever testimonials change
-    try {
-      localStorage.setItem('testimonials', JSON.stringify(allTestimonials));
-    } catch (e) {
-      // ignore localStorage errors
-    }
+    try { localStorage.setItem('testimonials', JSON.stringify(allTestimonials)); } catch {}
   }, [allTestimonials]);
 
-  // load persisted testimonials (if any) on mount / when prop changes
+  // Fetch reviews from Supabase (fallback to props/localStorage)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('testimonials');
-      if (saved) {
-        const parsed: Testimonial[] = JSON.parse(saved);
-        setAllTestimonials(parsed);
-        return;
-      }
-    } catch (e) {
-      // ignore parse errors and fall back to props
-    }
-    setAllTestimonials(testimonials);
-  }, [testimonials]);
+      if (saved) setAllTestimonials(JSON.parse(saved));
+    } catch {}
 
-  // load persisted testimonials from API on mount
-  useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const fetchReviews = async () => {
       try {
-        const resp = await fetch('/api/reviews');
-        if (!resp.ok) throw new Error('Failed to fetch reviews');
-        const json = await resp.json();
-        if (!cancelled && json && Array.isArray(json.reviews)) {
-          setAllTestimonials(json.reviews.length ? json.reviews : testimonials);
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('id,author,relation,quote,created_at')
+          .order('created_at', { ascending: true });
+        if (!cancelled && !error && Array.isArray(data)) {
+          const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote }));
+          if (mapped.length) setAllTestimonials(mapped);
+        } else if (!cancelled) {
+          setAllTestimonials(prev => (prev.length ? prev : testimonials));
         }
-      } catch {
-        // fall back to local props if API fails
-        setAllTestimonials(testimonials);
+      } catch (err) {
+        console.error('fetchReviews error', err);
+        if (!cancelled) setAllTestimonials(prev => (prev.length ? prev : testimonials));
       }
-    })();
+    };
+
+    fetchReviews();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testimonials]);
@@ -78,8 +62,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   }, []);
 
   const startSlider = useCallback(() => {
-    stopSlider(); // Ensure no multiple intervals are running
-    // Use the ref inside the interval so it sees the latest testimonials
+    stopSlider();
     intervalRef.current = window.setInterval(() => {
       setCurrentIndex((prevIndex) => {
         const len = allTestimonialsRef.current.length;
@@ -100,26 +83,18 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
       }
     }, { threshold: 0.1 });
 
-    const currentRef = sectionRef.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
-
+    const el = sectionRef.current;
+    if (el) observer.observe(el);
     return () => {
       stopSlider();
-      if (currentRef) {
-        observer.unobserve(currentRef);
-      }
+      if (el) observer.unobserve(el);
     };
   }, [startSlider, stopSlider]);
 
   const goToSlide = (slideIndex: number) => {
     setCurrentIndex(slideIndex);
-    // Reset interval on manual navigation
     startSlider();
   };
-
-  // use current testimonials length (not original prop length)
   const goToPrev = () => goToSlide((currentIndex - 1 + allTestimonials.length) % Math.max(1, allTestimonials.length));
   const goToNext = () => goToSlide((currentIndex + 1) % Math.max(1, allTestimonials.length));
 
@@ -127,30 +102,51 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     setNewReview({ ...newReview, [e.target.name]: e.target.value });
   };
 
+  const fetchAndSetReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('id,author,relation,quote,created_at')
+        .order('created_at', { ascending: true });
+      if (error) {
+        console.error('Supabase select error:', error);
+        return null;
+      }
+      if (Array.isArray(data)) {
+        const mapped = data.map((r: any) => ({ author: r.author, relation: r.relation ?? '', quote: r.quote }));
+        setAllTestimonials(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.error('fetchAndSetReviews caught:', err);
+    }
+    return null;
+  };
+
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newReview.author || !newReview.quote) return;
+    if (!newReview.author.trim() || !newReview.quote.trim()) return;
     setIsSaving(true);
     try {
-      const resp = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newReview),
-      });
-      const json = await resp.json();
-      if (resp.ok && json.reviews) {
-        setAllTestimonials(json.reviews);
-        setCurrentIndex(json.reviews.length - 1);
-        setNewReview({ author: '', relation: '', quote: '' });
-        startSlider();
+      const payload = { author: newReview.author.trim(), relation: newReview.relation.trim() || '', quote: newReview.quote.trim() };
+      const { data, error } = await supabase.from('reviews').insert([payload]).select();
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
+      console.info('Supabase insert response:', data);
+      const mapped = await fetchAndSetReviews();
+      if (mapped && mapped.length) {
+        setCurrentIndex(mapped.length - 1);
       } else {
-        // fallback: update locally if API failed
-        const updated = [...allTestimonials, { ...newReview }];
+        const updated = [...allTestimonials, payload];
         setAllTestimonials(updated);
         setCurrentIndex(updated.length - 1);
-        setNewReview({ author: '', relation: '', quote: '' });
       }
-    } catch {
+      setNewReview({ author: '', relation: '', quote: '' });
+      startSlider();
+    } catch (err) {
+      console.error('handleAddReview caught:', err);
       const updated = [...allTestimonials, { ...newReview }];
       setAllTestimonials(updated);
       setCurrentIndex(updated.length - 1);
@@ -170,17 +166,10 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
           </div>
           <p className="mt-4 text-lg text-slate-300">Real stories from those I've had the privilege to represent.</p>
         </div>
-        <div
-          className="max-w-4xl mx-auto relative h-80 md:h-64"
-          onMouseEnter={stopSlider}
-          onMouseLeave={startSlider}
-        >
+
+        <div className="max-w-4xl mx-auto relative h-80 md:h-64" onMouseEnter={stopSlider} onMouseLeave={startSlider}>
           {allTestimonials.map((testimonial, index) => (
-            <div
-              key={index}
-              className={`absolute top-0 left-0 w-full h-full flex items-center justify-center p-4 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`}
-              aria-hidden={index !== currentIndex}
-            >
+            <div key={index} className={`absolute top-0 left-0 w-full h-full flex items-center justify-center p-4 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`} aria-hidden={index !== currentIndex}>
               <blockquote className="bg-slate-900/50 p-8 rounded-lg shadow-lg max-w-3xl">
                 <p className="text-slate-200 italic mb-6 text-center text-lg">"{testimonial.quote}"</p>
                 <footer className="text-center">
@@ -190,6 +179,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
               </blockquote>
             </div>
           ))}
+
           <button onClick={goToPrev} className="absolute top-1/2 left-0 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors duration-300" aria-label="Previous testimonial">
             <Icon path="M15.75 19.5 8.25 12l7.5-7.5" className="w-6 h-6 text-white" />
           </button>
@@ -197,57 +187,13 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
             <Icon path="M8.25 4.5 15.75 12l-7.5 7.5" className="w-6 h-6 text-white" />
           </button>
         </div>
+
         <div className="flex justify-center mt-8 space-x-3">
           {allTestimonials.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`w-3 h-3 rounded-full transition-all duration-300 ${index === currentIndex ? 'bg-amber-400 scale-125' : 'bg-slate-600 hover:bg-slate-500'}`}
-              aria-label={`Go to slide ${index + 1}`}
-            ></button>
+            <button key={index} onClick={() => goToSlide(index)} className={`w-3 h-3 rounded-full transition-all duration-300 ${index === currentIndex ? 'bg-amber-400 scale-125' : 'bg-slate-600 hover:bg-slate-500'}`} aria-label={`Go to slide ${index + 1}`} />
           ))}
         </div>
-        {/* Add a Review Section */}
+
         <div className="max-w-xl mx-auto mt-12 bg-slate-900/40 p-8 rounded-lg shadow-lg">
           <h3 className="text-xl font-bold text-amber-400 mb-4 text-center">Add a Review</h3>
-          <form onSubmit={handleAddReview} className="space-y-4">
-            <input
-              type="text"
-              name="author"
-              value={newReview.author}
-              onChange={handleReviewChange}
-              placeholder="Your Name"
-              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
-              required
-            />
-            <input
-              type="text"
-              name="relation"
-              value={newReview.relation}
-              onChange={handleReviewChange}
-              placeholder="Your Relation (e.g. Client)"
-              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
-              required
-            />
-            <textarea
-              name="quote"
-              value={newReview.quote}
-              onChange={handleReviewChange}
-              placeholder="Your Review"
-              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
-              rows={3}
-              required
-            />
-            <button
-              type="submit"
-              className="w-full py-2 rounded bg-amber-400 text-slate-900 font-bold hover:bg-amber-300 transition-colors"
-              disabled={isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Add a Review'}
-            </button>
-          </form>
-        </div>
-      </div>
-    </section>
-  );
-};
+          <form onSubmit={handleAddReview} className="space
