@@ -12,18 +12,82 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
-  const startSlider = useCallback(() => {
-    stopSlider(); // Ensure no multiple intervals are running
-    intervalRef.current = window.setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % testimonials.length);
-    }, 5000);
-  }, [testimonials.length]);
+  // form state for adding a review
+  const [newReview, setNewReview] = useState({
+    author: '',
+    relation: '',
+    quote: ''
+  });
+
+  // testimonials state (persisted)
+  const [allTestimonials, setAllTestimonials] = useState<Testimonial[]>(testimonials);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // ref that always points to the latest testimonials array (used inside interval)
+  const allTestimonialsRef = useRef<Testimonial[]>(allTestimonials);
+  useEffect(() => {
+    allTestimonialsRef.current = allTestimonials;
+    // persist to localStorage whenever testimonials change
+    try {
+      localStorage.setItem('testimonials', JSON.stringify(allTestimonials));
+    } catch (e) {
+      // ignore localStorage errors
+    }
+  }, [allTestimonials]);
+
+  // load persisted testimonials (if any) on mount / when prop changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('testimonials');
+      if (saved) {
+        const parsed: Testimonial[] = JSON.parse(saved);
+        setAllTestimonials(parsed);
+        return;
+      }
+    } catch (e) {
+      // ignore parse errors and fall back to props
+    }
+    setAllTestimonials(testimonials);
+  }, [testimonials]);
+
+  // load persisted testimonials from API on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch('/api/reviews');
+        if (!resp.ok) throw new Error('Failed to fetch reviews');
+        const json = await resp.json();
+        if (!cancelled && json && Array.isArray(json.reviews)) {
+          setAllTestimonials(json.reviews.length ? json.reviews : testimonials);
+        }
+      } catch {
+        // fall back to local props if API fails
+        setAllTestimonials(testimonials);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testimonials]);
 
   const stopSlider = useCallback(() => {
     if (intervalRef.current) {
       window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
+
+  const startSlider = useCallback(() => {
+    stopSlider(); // Ensure no multiple intervals are running
+    // Use the ref inside the interval so it sees the latest testimonials
+    intervalRef.current = window.setInterval(() => {
+      setCurrentIndex((prevIndex) => {
+        const len = allTestimonialsRef.current.length;
+        if (!len) return 0;
+        return (prevIndex + 1) % len;
+      });
+    }, 5000) as unknown as number;
+  }, [stopSlider]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -54,9 +118,47 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
     // Reset interval on manual navigation
     startSlider();
   };
-  
-  const goToPrev = () => goToSlide((currentIndex - 1 + testimonials.length) % testimonials.length);
-  const goToNext = () => goToSlide((currentIndex + 1) % testimonials.length);
+
+  // use current testimonials length (not original prop length)
+  const goToPrev = () => goToSlide((currentIndex - 1 + allTestimonials.length) % Math.max(1, allTestimonials.length));
+  const goToNext = () => goToSlide((currentIndex + 1) % Math.max(1, allTestimonials.length));
+
+  const handleReviewChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setNewReview({ ...newReview, [e.target.name]: e.target.value });
+  };
+
+  const handleAddReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReview.author || !newReview.quote) return;
+    setIsSaving(true);
+    try {
+      const resp = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newReview),
+      });
+      const json = await resp.json();
+      if (resp.ok && json.reviews) {
+        setAllTestimonials(json.reviews);
+        setCurrentIndex(json.reviews.length - 1);
+        setNewReview({ author: '', relation: '', quote: '' });
+        startSlider();
+      } else {
+        // fallback: update locally if API failed
+        const updated = [...allTestimonials, { ...newReview }];
+        setAllTestimonials(updated);
+        setCurrentIndex(updated.length - 1);
+        setNewReview({ author: '', relation: '', quote: '' });
+      }
+    } catch {
+      const updated = [...allTestimonials, { ...newReview }];
+      setAllTestimonials(updated);
+      setCurrentIndex(updated.length - 1);
+      setNewReview({ author: '', relation: '', quote: '' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <section id="testimonials" className="py-24 bg-slate-800 text-white" ref={sectionRef}>
@@ -68,12 +170,12 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
           </div>
           <p className="mt-4 text-lg text-slate-300">Real stories from those I've had the privilege to represent.</p>
         </div>
-        <div 
+        <div
           className="max-w-4xl mx-auto relative h-80 md:h-64"
           onMouseEnter={stopSlider}
           onMouseLeave={startSlider}
         >
-          {testimonials.map((testimonial, index) => (
+          {allTestimonials.map((testimonial, index) => (
             <div
               key={index}
               className={`absolute top-0 left-0 w-full h-full flex items-center justify-center p-4 transition-opacity duration-700 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0'}`}
@@ -96,7 +198,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
           </button>
         </div>
         <div className="flex justify-center mt-8 space-x-3">
-          {testimonials.map((_, index) => (
+          {allTestimonials.map((_, index) => (
             <button
               key={index}
               onClick={() => goToSlide(index)}
@@ -104,6 +206,46 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ testimonials }) => {
               aria-label={`Go to slide ${index + 1}`}
             ></button>
           ))}
+        </div>
+        {/* Add a Review Section */}
+        <div className="max-w-xl mx-auto mt-12 bg-slate-900/40 p-8 rounded-lg shadow-lg">
+          <h3 className="text-xl font-bold text-amber-400 mb-4 text-center">Add a Review</h3>
+          <form onSubmit={handleAddReview} className="space-y-4">
+            <input
+              type="text"
+              name="author"
+              value={newReview.author}
+              onChange={handleReviewChange}
+              placeholder="Your Name"
+              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
+              required
+            />
+            <input
+              type="text"
+              name="relation"
+              value={newReview.relation}
+              onChange={handleReviewChange}
+              placeholder="Your Relation (e.g. Client)"
+              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
+              required
+            />
+            <textarea
+              name="quote"
+              value={newReview.quote}
+              onChange={handleReviewChange}
+              placeholder="Your Review"
+              className="w-full px-4 py-2 rounded bg-slate-800 text-white border border-slate-700 focus:outline-none"
+              rows={3}
+              required
+            />
+            <button
+              type="submit"
+              className="w-full py-2 rounded bg-amber-400 text-slate-900 font-bold hover:bg-amber-300 transition-colors"
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Add a Review'}
+            </button>
+          </form>
         </div>
       </div>
     </section>
